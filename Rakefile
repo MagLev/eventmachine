@@ -2,6 +2,7 @@ require 'rubygems' unless defined?(Gem)
 require 'rake'     unless defined?(Rake)
 import  *Dir['tasks/*.rake']
 
+require File.expand_path('../lib/em/version', __FILE__)
 GEMSPEC = eval(File.read(File.expand_path('../eventmachine.gemspec', __FILE__)))
 
 require 'yard'

@@ -1,5 +1,5 @@
 # -*- encoding: utf-8 -*-
-require File.expand_path('../lib/em/version', __FILE__)
+require File.expand_path('../lib/em/version', __FILE__) unless defined? EventMachine
 
 Gem::Specification.new do |s|
   s.name = 'eventmachine'
