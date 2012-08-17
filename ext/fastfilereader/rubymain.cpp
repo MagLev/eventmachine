@@ -118,6 +118,7 @@ extern "C" void Init_fastfilereaderext()
 	Mapper = rb_define_class_under (FastFileReader, "Mapper", rb_cObject);
 
 	rb_define_singleton_method (Mapper, "new", (VALUE(*)(...))mapper_new, 1);
+	rb_define_method (Mapper, "new", (VALUE(*)(...))mapper_new, 1);
 	rb_define_method (Mapper, "size", (VALUE(*)(...))mapper_size, 0);
 	rb_define_method (Mapper, "close", (VALUE(*)(...))mapper_close, 0);
 	rb_define_method (Mapper, "get_chunk", (VALUE(*)(...))mapper_get_chunk, 2);
