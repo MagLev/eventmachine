@@ -2,7 +2,7 @@
 require File.expand_path('../lib/em/version', __FILE__) unless defined? EventMachine
 
 Gem::Specification.new do |s|
-  s.name = 'eventmachine'
+  s.name = 'eventmachine-maglev-'
   s.version = EventMachine::VERSION
   s.homepage = 'http://rubyeventmachine.com'
   s.rubyforge_project = 'eventmachine'
