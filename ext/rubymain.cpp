@@ -731,7 +731,7 @@ static VALUE t_invoke_popen (VALUE self, VALUE cmd)
 	for (int i=0; i < len; i++) {
 		VALUE ix = INT2FIX (i);
 		VALUE s = rb_ary_aref (1, &ix, cmd);
-		strings[i] = StringValuePtr (s);
+		strings[i] = (char*)StringValuePtr (s);
 	}
 	strings[len] = NULL;
 

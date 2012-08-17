@@ -467,11 +467,11 @@ bool EventMachine_t::_RunEpollOnce()
 	assert (epfd != -1);
 	int s;
 
-	#ifdef BUILD_FOR_RUBY
+	#if defined(BUILD_FOR_RUBY) && !defined(BUILD_FOR_MAGLEV)
 	TRAP_BEG;
 	#endif
 	s = epoll_wait (epfd, epoll_events, MaxEvents, 50);
-	#ifdef BUILD_FOR_RUBY
+	#if defined(BUILD_FOR_RUBY) && !defined(BUILD_FOR_MAGLEV)
 	TRAP_END;
 	#endif
 
@@ -561,7 +561,7 @@ bool EventMachine_t::_RunEpollOnce()
 		}
 	}
 
-	#ifdef BUILD_FOR_RUBY
+	#if defined(BUILD_FOR_RUBY) && !defined(BUILD_FOR_MAGLEV)
 	if (!rb_thread_alone()) {
 		rb_thread_schedule();
 	}
@@ -585,11 +585,11 @@ bool EventMachine_t::_RunKqueueOnce()
 	struct timespec ts = {0, 10000000}; // Too frequent. Use blocking_region
 
 	int k;
-	#ifdef BUILD_FOR_RUBY
+	#if defined(BUILD_FOR_RUBY) && !defined(BUILD_FOR_MAGLEV)
 	TRAP_BEG;
 	#endif
 	k = kevent (kqfd, NULL, 0, Karray, MaxEvents, &ts);
-	#ifdef BUILD_FOR_RUBY
+	#if defined(BUILD_FOR_RUBY) && !defined(BUILD_FOR_MAGLEV)
 	TRAP_END;
 	#endif
 
@@ -664,7 +664,7 @@ bool EventMachine_t::_RunKqueueOnce()
 
 
 	// TODO, replace this with rb_thread_blocking_region for 1.9 builds.
-	#ifdef BUILD_FOR_RUBY
+	#if defined(BUILD_FOR_RUBY) && !defined(BUILD_FOR_MAGLEV)
 	if (!rb_thread_alone()) {
 		rb_thread_schedule();
 	}

@@ -32,6 +32,9 @@ See the file COPYING for complete licensing information.
 
 #ifdef BUILD_FOR_RUBY
   #include <ruby.h>
+#endif
+
+#if defined(BUILD_FOR_RUBY) && !defined(BUILD_FOR_MAGLEV)
   #define EmSelect rb_thread_select
 
   #if defined(HAVE_RBTRAP)
