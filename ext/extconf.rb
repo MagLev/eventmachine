@@ -25,7 +25,7 @@ end
 def manual_ssl_config
   ssl_libs_heads_args = {
     :unix => [%w[ssl crypto], %w[openssl/ssl.h openssl/err.h]],
-    :mswin => [%w[ssleay32 libeay32], %w[openssl/ssl.h openssl/err.h]],
+    :mswin => [%w[ssleay32 eay32], %w[openssl/ssl.h openssl/err.h]],
   }
 
   dc_flags = ['ssl']
@@ -40,7 +40,8 @@ def manual_ssl_config
 end
 
 if ENV['CROSS_COMPILING']
-  openssl_dir = File.expand_path("~/.rake-compiler/builds/openssl-1.0.0a/")
+  openssl_version = ENV.fetch("OPENSSL_VERSION", "1.0.0j")
+  openssl_dir = File.expand_path("~/.rake-compiler/builds/openssl-#{openssl_version}/")
   if File.exists?(openssl_dir)
     FileUtils.mkdir_p Dir.pwd+"/openssl/"
     FileUtils.cp Dir[openssl_dir+"/include/openssl/*.h"], Dir.pwd+"/openssl/", :verbose => true
@@ -57,7 +58,7 @@ if ENV['CROSS_COMPILING']
 end
 
 # Try to use pkg_config first, fixes #73
-if pkg_config('openssl') || manual_ssl_config
+if (!ENV['CROSS_COMPILING'] and pkg_config('openssl')) || manual_ssl_config
   add_define "WITH_SSL"
 else
   add_define "WITHOUT_SSL"
@@ -80,7 +81,7 @@ if defined? RUBY_ENGINE and RUBY_ENGINE =~ /maglev/
 end
 
 if RUBY_PLATFORM =~ /(mswin|mingw|bccwin)/
-  GNU_CHAIN = $1 == 'mingw'
+  GNU_CHAIN = ENV['CROSS_COMPILING'] or $1 == 'mingw'
   OS_WIN32 = true
   add_define "OS_WIN32"
 else
@@ -89,6 +90,15 @@ else
   add_define 'OS_UNIX'
 
   add_define "HAVE_KQUEUE" if have_header("sys/event.h") and have_header("sys/queue.h")
+end
+
+# Adjust number of file descriptors (FD) on Windows
+
+if RbConfig::CONFIG["host_os"] =~ /mingw/
+  found = RbConfig::CONFIG.values_at("CFLAGS", "CPPFLAGS").
+    any? { |v| v.include?("FD_SETSIZE") }
+
+  add_define "FD_SETSIZE=32767" unless found
 end
 
 # Main platform invariances:
@@ -142,6 +152,15 @@ when /linux/
 
 when /aix/
   CONFIG['LDSHARED'] = "$(CXX) -shared -Wl,-G -Wl,-brtl"
+
+when /cygwin/
+  # For rubies built with Cygwin, CXX may be set to CC, which is just
+  # a wrapper for gcc.
+  # This will compile, but it will not link to the C++ std library.
+  # Explicitly set CXX to use g++.
+  CONFIG['CXX'] = "g++"
+  # on Unix we need a g++ link, not gcc.
+  CONFIG['LDSHARED'] = "$(CXX) -shared"
 
 else
   # on Unix we need a g++ link, not gcc.

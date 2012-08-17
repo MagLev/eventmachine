@@ -220,7 +220,7 @@ evma_pause
 
 extern "C" int evma_pause (const unsigned long binding)
 {
-	ConnectionDescriptor *cd = dynamic_cast <ConnectionDescriptor*> (Bindable_t::GetObject (binding));
+	EventableDescriptor *cd = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (binding));
 	if (cd)
 		return cd->Pause() ? 1 : 0;
 
@@ -233,7 +233,7 @@ evma_resume
 
 extern "C" int evma_resume (const unsigned long binding)
 {
-	ConnectionDescriptor *cd = dynamic_cast <ConnectionDescriptor*> (Bindable_t::GetObject (binding));
+	EventableDescriptor *cd = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (binding));
 	if (cd)
 		return cd->Resume() ? 1 : 0;
 
@@ -246,11 +246,20 @@ evma_is_paused
 
 extern "C" int evma_is_paused (const unsigned long binding)
 {
-	ConnectionDescriptor *cd = dynamic_cast <ConnectionDescriptor*> (Bindable_t::GetObject (binding));
+	EventableDescriptor *cd = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (binding));
 	if (cd)
 		return cd->IsPaused() ? 1 : 0;
 
 	return 0;
+}
+
+/************************
+evma_num_close_scheduled
+************************/
+
+extern "C" int evma_num_close_scheduled ()
+{
+	return EventMachine->NumCloseScheduled;
 }
 
 /**********************
@@ -802,6 +811,35 @@ extern "C" void evma_stop_proxy (const unsigned long from)
 	EventableDescriptor *ed = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (from));
 	if (ed)
 		ed->StopProxy();
+}
+
+/******************
+evma_proxied_bytes
+*******************/
+
+extern "C" unsigned long evma_proxied_bytes (const unsigned long from)
+{
+	ensure_eventmachine("evma_proxied_bytes");
+	EventableDescriptor *ed = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (from));
+	if (ed)
+		return ed->GetProxiedBytes();
+	else
+		return 0;
+}
+
+
+/***************************
+evma_get_last_activity_time
+****************************/
+
+extern "C" uint64_t evma_get_last_activity_time(const unsigned long from)
+{
+	ensure_eventmachine("evma_get_last_activity_time");
+	EventableDescriptor *ed = dynamic_cast <EventableDescriptor*> (Bindable_t::GetObject (from));
+	if (ed)
+		return ed->GetLastActivity();
+	else
+		return 0;
 }
 
 

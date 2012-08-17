@@ -73,6 +73,7 @@ EventMachine_t::EventMachine_t (EMCallback event_callback):
 	NextHeartbeatTime (0),
 	LoopBreakerReader (-1),
 	LoopBreakerWriter (-1),
+	NumCloseScheduled (0),
 	bTerminateSignalReceived (false),
 	bEpoll (false),
 	epfd (-1),
@@ -197,10 +198,9 @@ EventMachine_t::SetTimerQuantum
 void EventMachine_t::SetTimerQuantum (int interval)
 {
 	/* We get a timer-quantum expressed in milliseconds.
-	 * Don't set a quantum smaller than 5 or larger than 2500.
 	 */
 
-	if ((interval < 5) || (interval > 2500))
+	if ((interval < 5) || (interval > 5*60*1000))
 		throw std::runtime_error ("invalid timer-quantum");
 
 	Quantum.tv_sec = interval / 1000;
@@ -673,7 +673,13 @@ EventMachine_t::_TimeTilNextEvent
 
 timeval EventMachine_t::_TimeTilNextEvent()
 {
+	// 29jul11: Changed calculation base from MyCurrentLoopTime to the 
+	// real time. As MyCurrentLoopTime is set at the beginning of an
+	// iteration and this calculation is done at the end, evenmachine
+	// will potentially oversleep by the amount of time the iteration
+	// took to execute.
 	uint64_t next_event = 0;
+	uint64_t current_time = GetRealTime();
 
 	if (!Heartbeats.empty()) {
 		multimap<uint64_t,EventableDescriptor*>::iterator heartbeats = Heartbeats.begin();
@@ -687,16 +693,16 @@ timeval EventMachine_t::_TimeTilNextEvent()
 	}
 
 	if (!NewDescriptors.empty() || !ModifiedDescriptors.empty()) {
-		next_event = MyCurrentLoopTime;
+		next_event = current_time;
 	}
-
+	
 	timeval tv;
 
-	if (next_event == 0) {
+	if (next_event == 0 || NumCloseScheduled > 0) {
 		tv = Quantum;
 	} else {
-		if (next_event > MyCurrentLoopTime) {
-			uint64_t duration = next_event - MyCurrentLoopTime;
+		if (next_event > current_time) {
+			uint64_t duration = next_event - current_time;
 			tv.tv_sec = duration / 1000000;
 			tv.tv_usec = duration % 1000000;
 		} else {
@@ -1257,7 +1263,7 @@ const unsigned long EventMachine_t::ConnectToUnixServer (const char *server)
 
 	#ifdef OS_WIN32
 	throw std::runtime_error ("unix-domain connection unavailable on this platform");
-	return NULL;
+	return 0;
 	#endif
 
 	// The whole rest of this function is only compiled on Unix systems.
@@ -1356,6 +1362,7 @@ const unsigned long EventMachine_t::AttachFD (int fd, bool watch_mode)
 	if (!cd)
 		throw std::runtime_error ("no connection allocated");
 
+	cd->SetAttached(true);
 	cd->SetWatchOnly(watch_mode);
 	cd->SetConnectPending (false);
 
@@ -1395,7 +1402,11 @@ int EventMachine_t::DetachFD (EventableDescriptor *ed)
 	if (bKqueue) {
 		// remove any read/write events for this fd
 		struct kevent k;
+#ifdef __NetBSD__
+		EV_SET (&k, ed->GetSocket(), EVFILT_READ | EVFILT_WRITE, EV_DELETE, 0, 0, (intptr_t)ed);
+#else
 		EV_SET (&k, ed->GetSocket(), EVFILT_READ | EVFILT_WRITE, EV_DELETE, 0, 0, ed);
+#endif
 		int t = kevent (kqfd, &k, 1, NULL, 0, NULL);
 		if (t < 0 && (errno != ENOENT) && (errno != EBADF)) {
 			char buf [200];
@@ -1651,7 +1662,11 @@ void EventMachine_t::ArmKqueueWriter (EventableDescriptor *ed)
 		if (!ed)
 			throw std::runtime_error ("added bad descriptor");
 		struct kevent k;
+#ifdef __NetBSD__
+		EV_SET (&k, ed->GetSocket(), EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, (intptr_t)ed);
+#else
 		EV_SET (&k, ed->GetSocket(), EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, ed);
+#endif
 		int t = kevent (kqfd, &k, 1, NULL, 0, NULL);
 		if (t < 0) {
 			char buf [200];
@@ -1673,7 +1688,11 @@ void EventMachine_t::ArmKqueueReader (EventableDescriptor *ed)
 		if (!ed)
 			throw std::runtime_error ("added bad descriptor");
 		struct kevent k;
+#ifdef __NetBSD__
+		EV_SET (&k, ed->GetSocket(), EVFILT_READ, EV_ADD, 0, 0, (intptr_t)ed);
+#else
 		EV_SET (&k, ed->GetSocket(), EVFILT_READ, EV_ADD, 0, 0, ed);
+#endif
 		int t = kevent (kqfd, &k, 1, NULL, 0, NULL);
 		if (t < 0) {
 			char buf [200];
@@ -1724,7 +1743,11 @@ void EventMachine_t::_AddNewDescriptors()
 			// INCOMPLETE. Some descriptors don't want to be readable.
 			assert (kqfd != -1);
 			struct kevent k;
+#ifdef __NetBSD__
+			EV_SET (&k, ed->GetSocket(), EVFILT_READ, EV_ADD, 0, 0, (intptr_t)ed);
+#else
 			EV_SET (&k, ed->GetSocket(), EVFILT_READ, EV_ADD, 0, 0, ed);
+#endif
 			int t = kevent (kqfd, &k, 1, NULL, 0, NULL);
 			assert (t == 0);
 		}
@@ -1789,10 +1812,10 @@ void EventMachine_t::Modify (EventableDescriptor *ed)
 
 
 /***********************
-EventMachine_t::Closing
+EventMachine_t::Deregister
 ***********************/
 
-void EventMachine_t::Closing (EventableDescriptor *ed)
+void EventMachine_t::Deregister (EventableDescriptor *ed)
 {
 	if (!ed)
 		throw std::runtime_error ("modified bad descriptor");

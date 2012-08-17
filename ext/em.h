@@ -46,6 +46,15 @@ See the file COPYING for complete licensing information.
   #ifndef RUBY_UBF_IO
     #define RUBY_UBF_IO RB_UBF_DFL
   #endif
+  #ifndef RSTRING_PTR
+    #define RSTRING_PTR(str) RSTRING(str)->ptr
+  #endif
+  #ifndef RSTRING_LEN
+    #define RSTRING_LEN(str) RSTRING(str)->len
+  #endif
+  #ifndef RSTRING_LENINT
+    #define RSTRING_LENINT(str) RSTRING_LEN(str)
+  #endif
 #else
   #define EmSelect select
 #endif
@@ -84,7 +93,7 @@ class EventMachine_t
 
 		void Add (EventableDescriptor*);
 		void Modify (EventableDescriptor*);
-		void Closing (EventableDescriptor*);
+		void Deregister (EventableDescriptor*);
 
 		const unsigned long AttachFD (int, bool);
 		int DetachFD (EventableDescriptor*);
@@ -155,6 +164,7 @@ class EventMachine_t
 	public:
 		void _ReadLoopBreaker();
 		void _ReadInotifyEvents();
+        int NumCloseScheduled;
 
 	private:
 		enum {

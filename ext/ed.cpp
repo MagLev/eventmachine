@@ -54,16 +54,19 @@ EventableDescriptor::EventableDescriptor (int sd, EventMachine_t *em):
 	bCloseNow (false),
 	bCloseAfterWriting (false),
 	MySocket (sd),
+	bAttached (false),
 	bWatchOnly (false),
 	EventCallback (NULL),
 	bCallbackUnbind (true),
 	UnbindReasonCode (0),
 	ProxyTarget(NULL),
 	ProxiedFrom(NULL),
+	ProxiedBytes(0),
 	MaxOutboundBufSize(0),
 	MyEventMachine (em),
 	PendingConnectTimeout(20000000),
-	InactivityTimeout (0)
+	InactivityTimeout (0),
+	bPaused (false)
 {
 	/* There are three ways to close a socket, all of which should
 	 * automatically signal to the event machine that this object
@@ -114,6 +117,7 @@ EventableDescriptor::~EventableDescriptor()
 		(*EventCallback)(ProxiedFrom->GetBinding(), EM_PROXY_TARGET_UNBOUND, NULL, 0);
 		ProxiedFrom->StopProxy();
 	}
+	MyEventMachine->NumCloseScheduled--;
 	StopProxy();
 	Close();
 }
@@ -168,13 +172,21 @@ void EventableDescriptor::Close()
 	 * Therefore, it is necessary to notify EventMachine that
 	 * the fd associated with this EventableDescriptor is
 	 * closing.
+	 *
+	 * EventMachine also never closes fds for STDIN, STDOUT and 
+	 * STDERR (0, 1 & 2)
 	 */
 
 	// Close the socket right now. Intended for emergencies.
-	if (MySocket != INVALID_SOCKET && !bWatchOnly) {
-		MyEventMachine->Closing (this);
-		shutdown (MySocket, 1);
-		close (MySocket);
+	if (MySocket != INVALID_SOCKET) {
+		MyEventMachine->Deregister (this);
+		
+		// Do not close STDIN, STDOUT, STDERR
+		if (MySocket > 2 && !bAttached) {
+			shutdown (MySocket, 1);
+			close (MySocket);
+		}
+		
 		MySocket = INVALID_SOCKET;
 	}
 }
@@ -205,6 +217,7 @@ EventableDescriptor::ScheduleClose
 
 void EventableDescriptor::ScheduleClose (bool after_writing)
 {
+	MyEventMachine->NumCloseScheduled++;
 	// KEEP THIS SYNCHRONIZED WITH ::IsCloseScheduled.
 	if (after_writing)
 		bCloseAfterWriting = true;
@@ -235,6 +248,7 @@ void EventableDescriptor::StartProxy(const unsigned long to, const unsigned long
 		StopProxy();
 		ProxyTarget = ed;
 		BytesToProxy = length;
+		ProxiedBytes = 0;
 		ed->SetProxiedFrom(this, bufsize);
 		return;
 	}
@@ -281,6 +295,7 @@ void EventableDescriptor::_GenericInboundDispatch(const char *buf, int size)
 		if (BytesToProxy > 0) {
 			unsigned long proxied = min(BytesToProxy, (unsigned long) size);
 			ProxyTarget->SendOutboundData(buf, proxied);
+			ProxiedBytes += (unsigned long) proxied;
 			BytesToProxy -= proxied;
 			if (BytesToProxy == 0) {
 				StopProxy();
@@ -291,6 +306,7 @@ void EventableDescriptor::_GenericInboundDispatch(const char *buf, int size)
 			}
 		} else {
 			ProxyTarget->SendOutboundData(buf, size);
+			ProxiedBytes += (unsigned long) size;
 		}
 	} else {
 		(*EventCallback)(GetBinding(), EM_CONNECTION_READ, buf, size);
@@ -355,7 +371,6 @@ ConnectionDescriptor::ConnectionDescriptor
 
 ConnectionDescriptor::ConnectionDescriptor (int sd, EventMachine_t *em):
 	EventableDescriptor (sd, em),
-	bPaused (false),
 	bConnectPending (false),
 	bNotifyReadable (false),
 	bNotifyWritable (false),
@@ -446,6 +461,16 @@ void ConnectionDescriptor::SetConnectPending(bool f)
 {
 	bConnectPending = f;
 	_UpdateEvents();
+}
+
+
+/**********************************
+ConnectionDescriptor::SetAttached
+***********************************/
+
+void ConnectionDescriptor::SetAttached(bool state)
+{
+   bAttached = state;
 }
 
 
